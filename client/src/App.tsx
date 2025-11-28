@@ -544,7 +544,7 @@ const RemoteVideo = ({ stream }: { stream?: MediaStream }) => {
     );
 };
 
-const AudioVisualizer = ({ stream, isLocal }: { stream: MediaStream, isLocal: boolean }) => {
+const AudioVisualizer = ({ stream }: { stream: MediaStream, isLocal: boolean }) => {
     const [volume, setVolume] = useState(0);
     const audioContextRef = useRef<AudioContext | null>(null);
     const analyserRef = useRef<AnalyserNode | null>(null);
