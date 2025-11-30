@@ -286,7 +286,7 @@ import {
 } from 'lucide-react';
 
 // --- CONFIG ---
-const SERVER_URL = "http://localhost:5000"; 
+const SERVER_URL = "https://snatch-3.onrender.com"; 
 const ICE_SERVERS = {
   iceServers: [
     { urls: "stun:stun.l.google.com:19302" },
