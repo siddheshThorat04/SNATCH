@@ -14,8 +14,7 @@ const io = new Server(server, {
     }
 });
 
-// Types/Interfaces are removed in JS.
-// Just initialize the objects directly.
+// Storage
 const users = {};
 const rooms = {};
 
@@ -25,12 +24,18 @@ io.on('connection', (socket) => {
     socket.on('join-room', (roomId, name) => {
         socket.join(roomId);
         // We create the user object dynamically
-        users[socket.id] = { id: socket.id, roomId, name, isSnatched: false };
+        users[socket.id] = { 
+            id: socket.id, 
+            roomId, 
+            name, 
+            isSnatched: false, 
+            snatchedWith: null 
+        };
         
         if (!rooms[roomId]) rooms[roomId] = [];
         rooms[roomId].push(socket.id);
 
-        // Notify others so they can prepare to receive a call
+        // Notify others
         socket.to(roomId).emit('user-connected', { userId: socket.id, name });
 
         // Send existing users to the new joiner
@@ -38,6 +43,45 @@ io.on('connection', (socket) => {
             .filter(id => id !== socket.id)
             .map(id => users[id]);
         socket.emit('existing-users', usersInRoom);
+    });
+
+    // --- SNATCH LOGIC (NEW) ---
+
+    // 1. Handle Request
+    socket.on('request-snatch', ({ targetUserId }) => {
+        const requester = users[socket.id];
+        // Forward the request to the target
+        io.to(targetUserId).emit('snatch-request', { 
+            fromId: socket.id, 
+            fromName: requester ? requester.name : 'Unknown' 
+        });
+    });
+
+    // 2. Handle Acceptance
+    socket.on('accept-snatch', ({ requesterId }) => {
+        const accepterId = socket.id;
+        
+        // Update server state
+        if (users[requesterId]) {
+            users[requesterId].isSnatched = true;
+            users[requesterId].snatchedWith = accepterId;
+        }
+        if (users[accepterId]) {
+            users[accepterId].isSnatched = true;
+            users[accepterId].snatchedWith = requesterId;
+        }
+
+        // Notify the pair that snatch started
+        io.to(requesterId).emit('snatch-started', { withId: accepterId });
+        io.to(accepterId).emit('snatch-started', { withId: requesterId });
+
+        // Notify the room (Sid) to blur these users
+        if (users[accepterId]) {
+            const roomId = users[accepterId].roomId;
+            io.to(roomId).emit('users-snatched-update', { 
+                snatchedUsers: [requesterId, accepterId] 
+            });
+        }
     });
 
     // --- WebRTC Signaling ---
@@ -54,12 +98,11 @@ io.on('connection', (socket) => {
         io.to(payload.target).emit('ice-candidate', payload);
     });
 
-    // --- End Signaling ---
+    // --- Disconnect ---
 
     socket.on('disconnect', () => {
         const user = users[socket.id];
         if (user) {
-            // Filter the user out of the room array
             rooms[user.roomId] = rooms[user.roomId].filter(id => id !== socket.id);
             socket.to(user.roomId).emit('user-disconnected', user.id);
             delete users[socket.id];
